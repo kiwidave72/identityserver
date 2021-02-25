@@ -1,10 +1,7 @@
-﻿// Copyright (c) Brock Allen & Dominick Baier. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
-
-
-using IdentityServer4;
-using identityserver.Data;
+﻿using identityserver.Data;
 using identityserver.Models;
+using IdentityServer4;
+using IdentityServer4.EntityFramework.Mappers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
@@ -12,6 +9,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using System;
+using System.Linq;
+using ConfigurationDbContext = identityserver.Data.ConfigurationDbContext;
+using PersistedGrantDbContext = identityserver.Data.PersistedGrantDbContext;
 
 namespace identityserver
 {
@@ -30,11 +31,26 @@ namespace identityserver
         {
             services.AddControllersWithViews();
 
-            services.AddDbContext<ApplicationDbContext>(options =>
-                options.UseSqlite(Configuration.GetConnectionString("DefaultConnection")));
+
+            string connectionString = Configuration.GetConnectionString("IdentityServerExample");
+            if (!connectionString.EndsWith(';')) { connectionString += ';'; }
+            connectionString += "Application Name=IdentityServerExample;";
+
+            
+            services.AddDbContextPool<ApplicationDbContext>(optionsBuilder =>
+            {
+                optionsBuilder.UseSqlServer(connectionString,
+                    options => options
+                        .EnableRetryOnFailure(3, TimeSpan.FromSeconds(2), null));
+            });
+            
+            
+            services.AddTransient<UserManager<ApplicationUser>>();
+            services.AddTransient<ApplicationDbContext>();
 
             services.AddIdentity<ApplicationUser, IdentityRole>()
                 .AddEntityFrameworkStores<ApplicationDbContext>()
+                .AddRoles<IdentityRole>()
                 .AddDefaultTokenProviders();
 
             var builder = services.AddIdentityServer(options =>
@@ -47,11 +63,23 @@ namespace identityserver
                 // see https://identityserver4.readthedocs.io/en/latest/topics/resources.html
                 options.EmitStaticAudienceClaim = true;
             })
-                .AddInMemoryIdentityResources(Config.IdentityResources)
-                .AddInMemoryApiScopes(Config.ApiScopes)
-                .AddInMemoryClients(Config.Clients)
-                .AddAspNetIdentity<ApplicationUser>();
+                //.AddInMemoryApiResources(Config.Apis)
+                //.AddInMemoryIdentityResources(Config.IdentityResources)
+                //.AddInMemoryApiScopes(Config.ApiScopes)
+                //.AddInMemoryClients(Config.Clients)
+                .AddAspNetIdentity<ApplicationUser>()
+                
+                .AddConfigurationStore<ConfigurationDbContext>(options =>
+                {
+                    options.ConfigureDbContext = b => b.UseSqlServer(connectionString);
+                })
+                .AddOperationalStore<PersistedGrantDbContext>(options =>
+                {
+                    options.ConfigureDbContext = b => b.UseSqlServer(connectionString);
+                    options.EnableTokenCleanup = true;
+                });
 
+            
             // not recommended for production - you need to store your key material somewhere secure
             builder.AddDeveloperSigningCredential();
 
@@ -70,10 +98,11 @@ namespace identityserver
 
         public void Configure(IApplicationBuilder app)
         {
+            //InitializeDatabase(app);
+
             if (Environment.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
-                app.UseDatabaseErrorPage();
             }
 
             app.UseStaticFiles();
@@ -85,6 +114,46 @@ namespace identityserver
             {
                 endpoints.MapDefaultControllerRoute();
             });
+        }
+
+
+        private void InitializeDatabase(IApplicationBuilder app)
+        {
+
+            using (var serviceScope = app.ApplicationServices.GetService<IServiceScopeFactory>().CreateScope())
+            {
+
+                serviceScope.ServiceProvider.GetRequiredService<PersistedGrantDbContext>().Database.Migrate();
+
+                var context = serviceScope.ServiceProvider.GetRequiredService<ConfigurationDbContext>();
+                context.Database.Migrate();
+                if (!context.Clients.Any())
+                {
+                    foreach (var client in Config.Clients)
+                    {
+                        context.Clients.Add(client.ToEntity());
+                    }
+                    context.SaveChanges();
+                }
+
+                if (!context.IdentityResources.Any())
+                {
+                    foreach (var resource in Config.IdentityResources)
+                    {
+                        context.IdentityResources.Add(resource.ToEntity());
+                    }
+                    context.SaveChanges();
+                }
+
+                if (!context.ApiScopes.Any())
+                {
+                    foreach (var resource in Config.ApiScopes)
+                    {
+                        context.ApiScopes.Add(resource.ToEntity());
+                    }
+                    context.SaveChanges();
+                }
+            }
         }
     }
 }

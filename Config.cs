@@ -10,6 +10,12 @@ namespace identityserver
 {
     public static class Config
     {
+        public static IEnumerable<ApiResource> Apis =>
+            new List<ApiResource>
+            {
+                new ApiResource("API", "My API"),
+            };
+
         public static IEnumerable<IdentityResource> IdentityResources =>
                    new IdentityResource[]
                    {

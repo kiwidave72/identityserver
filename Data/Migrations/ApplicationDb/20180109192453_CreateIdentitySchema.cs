@@ -1,7 +1,7 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
-using System;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
 
-namespace identityserver.Data.Migrations
+namespace identityserver.Data.Migrations.ApplicationDb
 {
     public partial class CreateIdentitySchema : Migration
     {

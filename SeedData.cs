@@ -3,7 +3,9 @@
 
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Net.Mime;
 using System.Security.Claims;
 using IdentityModel;
 using identityserver.Data;
@@ -17,91 +19,82 @@ namespace identityserver
 {
     public class SeedData
     {
-        public static void EnsureSeedData(string connectionString)
+        public static void AddIdentityTestData(ApplicationDbContext context)
         {
-            var services = new ServiceCollection();
-            services.AddLogging();
-            services.AddDbContext<ApplicationDbContext>(options =>
-               options.UseSqlite(connectionString));
-
-            services.AddIdentity<ApplicationUser, IdentityRole>()
-                .AddEntityFrameworkStores<ApplicationDbContext>()
-                .AddDefaultTokenProviders();
-
-            using (var serviceProvider = services.BuildServiceProvider())
+            
+            var bob = context.Users.FirstOrDefault(x => x.Email == "BobSmith@test.com");
+            if (bob == null)
             {
-                using (var scope = serviceProvider.GetRequiredService<IServiceScopeFactory>().CreateScope())
+                bob = new ApplicationUser
                 {
-                    var context = scope.ServiceProvider.GetService<ApplicationDbContext>();
-                    context.Database.Migrate();
+                    Id = "c03451a5-8cb7-41be-ba03-55d1da93f0fa",
+                    ConcurrencyStamp = "cc949dfd-a905-4657-a075-97a89711a3aa",
+                    UserName = "bob",
+                    NormalizedUserName = "BOB",
+                    Email = "BobSmith@test.com",
+                    NormalizedEmail = "BobSmith@test.com".ToUpper(),
+                    EmailConfirmed = true,
+                    PasswordHash = "AQAAAAEAACcQAAAAENay4oPIjFNEJ7/8sjhVw49gvoW//IfBdLK2io3ZvzQgj4YOul4jOfaQVOW3xVFR3g==", // "My long 123$ password"
+                    SecurityStamp = "099d224c-8714-416f-bfa9-73034da90045",
 
-                    var userMgr = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-                    var alice = userMgr.FindByNameAsync("alice").Result;
-                    if (alice == null)
+                    Claims = new List<IdentityUserClaim<string>>
                     {
-                        alice = new ApplicationUser
+                        new IdentityUserClaim<string>
                         {
-                            UserName = "alice",
-                            Email = "AliceSmith@email.com",
-                            EmailConfirmed = true,
-                        };
-                        var result = userMgr.CreateAsync(alice, "Pass123$").Result;
-                        if (!result.Succeeded)
+                            Id=1,  
+                            ClaimType = "name",
+                            ClaimValue = "Bob Smith"
+                        },
+                        new IdentityUserClaim<string>
                         {
-                            throw new Exception(result.Errors.First().Description);
-                        }
+                            Id=2,
+                            ClaimType = "given_name",
+                            ClaimValue = "Bob"
+                        },
+                        new IdentityUserClaim<string>
+                        {
+                            Id=3,
+                            ClaimType = "family_name",
+                            ClaimValue = "Smith"
+                        },
+                        new IdentityUserClaim<string>
+                        {
+                            Id=4,
+                            ClaimType = "email",
+                            ClaimValue = "BobSmith@test.com"
+                        },
+                        new IdentityUserClaim<string>
+                        {
+                            Id=5,
+                            ClaimType = "website",
+                            ClaimValue = "http://bob.test.com"
+                        },
 
-                        result = userMgr.AddClaimsAsync(alice, new Claim[]{
-                            new Claim(JwtClaimTypes.Name, "Alice Smith"),
-                            new Claim(JwtClaimTypes.GivenName, "Alice"),
-                            new Claim(JwtClaimTypes.FamilyName, "Smith"),
-                            new Claim(JwtClaimTypes.WebSite, "http://alice.com"),
-                        }).Result;
-                        if (!result.Succeeded)
+                        new IdentityUserClaim<string>
                         {
-                            throw new Exception(result.Errors.First().Description);
-                        }
-                        Log.Debug("alice created");
-                    }
-                    else
-                    {
-                        Log.Debug("alice already exists");
-                    }
+                            Id=6,
+                            ClaimType = "email_verified",
+                            ClaimValue = true.ToString()
+                        },
 
-                    var bob = userMgr.FindByNameAsync("bob").Result;
-                    if (bob == null)
-                    {
-                        bob = new ApplicationUser
+                        new IdentityUserClaim<string>
                         {
-                            UserName = "bob",
-                            Email = "BobSmith@email.com",
-                            EmailConfirmed = true
-                        };
-                        var result = userMgr.CreateAsync(bob, "Pass123$").Result;
-                        if (!result.Succeeded)
-                        {
-                            throw new Exception(result.Errors.First().Description);
+                            Id=7,
+                            ClaimType = "address",
+                            ClaimValue = @"{ 'street_address': 'One Hacker Way', 'locality': 'Heidelberg', 'postal_code': 69118, 'country': 'Germany' }"
                         }
+                    }
+                };
+                bob.UserRoles = new List<IdentityUserRole<string>>
+                {
+                };
 
-                        result = userMgr.AddClaimsAsync(bob, new Claim[]{
-                            new Claim(JwtClaimTypes.Name, "Bob Smith"),
-                            new Claim(JwtClaimTypes.GivenName, "Bob"),
-                            new Claim(JwtClaimTypes.FamilyName, "Smith"),
-                            new Claim(JwtClaimTypes.WebSite, "http://bob.com"),
-                            new Claim("location", "somewhere")
-                        }).Result;
-                        if (!result.Succeeded)
-                        {
-                            throw new Exception(result.Errors.First().Description);
-                        }
-                        Log.Debug("bob created");
-                    }
-                    else
-                    {
-                        Log.Debug("bob already exists");
-                    }
-                }
+                context.Users.Add(bob);
             }
+
+
+            context.SaveChanges();
         }
     }
 }
+
