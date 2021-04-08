@@ -11,6 +11,12 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System;
 using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using ConfigurationDbContext = identityserver.Data.ConfigurationDbContext;
 using PersistedGrantDbContext = identityserver.Data.PersistedGrantDbContext;
 
@@ -29,13 +35,15 @@ namespace identityserver
 
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddControllersWithViews();
-
-
             string connectionString = Configuration.GetConnectionString("IdentityServerExample");
             if (!connectionString.EndsWith(';')) { connectionString += ';'; }
             connectionString += "Application Name=IdentityServerExample;";
 
+
+            services.AddControllersWithViews();
+            services.AddHealthChecks().AddSqlServer(connectionString,name: "IdentityServerExample");
+            services.AddHealthChecks().AddCheck<HealthCheck>("example_health_check");
+            
             
             services.AddDbContextPool<ApplicationDbContext>(optionsBuilder =>
             {
@@ -113,6 +121,10 @@ namespace identityserver
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapDefaultControllerRoute();
+                endpoints.MapHealthChecks("/healthcheck", new HealthCheckOptions()
+                {
+                    ResponseWriter = HealthCheckResponse
+                });
             });
         }
 
@@ -154,6 +166,23 @@ namespace identityserver
                     context.SaveChanges();
                 }
             }
+        }
+
+        private static Task HealthCheckResponse(HttpContext context, HealthReport result)
+        {
+            context.Response.ContentType = "application/json";
+
+            var json = new JObject(
+                new JProperty("status", result.Status.ToString()),
+                new JProperty("results", new JObject(result.Entries.Select(pair =>
+                    new JProperty(pair.Key, new JObject(
+                        new JProperty("status", pair.Value.Status.ToString()),
+                        new JProperty("description", pair.Value.Description),
+                        new JProperty("data", new JObject(pair.Value.Data.Select(
+                            p => new JProperty(p.Key, p.Value))))))))));
+
+            return context.Response.WriteAsync(
+                json.ToString(Formatting.Indented));
         }
     }
 }
